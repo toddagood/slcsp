@@ -2,6 +2,7 @@
 
 from collections import defaultdict
 from os import environ
+from os.path import getmtime, isfile
 from sys import argv, stdout, stderr
 
 class RateFinder(object):
@@ -10,12 +11,37 @@ class RateFinder(object):
     # Exceptions.
     class CsvError(Exception): pass
 
-    def __init__(self, zips_csv, plans_csv):
+    def __init__(self, zips_csv, plans_csv, cache_csv=None):
         """Initializes this RateFinder."""
-        # Read the zips_csv file.
-        self.read_zips_csv(zips_csv)
-        # Read the plans_csv file.
-        self.read_plans_csv(plans_csv)
+        # Disable cached mapping.
+        self.use_cache = False
+        if cache_csv:
+            # Will use caching.
+            if (isfile(cache_csv) and isfile(zips_csv) and isfile(plans_csv)
+                and getmtime(cache_csv) > getmtime(zips_csv)
+                and getmtime(cache_csv) > getmtime(plans_csv)):
+                # The cache_csv file is available and up-to-date, so use it.
+                pass
+            else:
+                # The cache_csv file does not exist or is out-of-date.
+                # Create/update it.
+                # Read the zips_csv file.
+                self.read_zips_csv(zips_csv)
+                # Read the plans_csv file.
+                self.read_plans_csv(plans_csv)
+                # Dump the cache_csv file.
+                self.dump_cache_csv(cache_csv)
+
+            # Read the cache_csv file.
+            self.read_cache_csv(cache_csv)
+            # Enable cached mapping.
+            self.use_cache = True
+        else:
+            # Will not use caching.
+            # Read the zips_csv file.
+            self.read_zips_csv(zips_csv)
+            # Read the plans_csv file.
+            self.read_plans_csv(plans_csv)
 
     def read_zips_csv(self, zips_csv):
         """Reads a zips_csv file."""
@@ -69,6 +95,9 @@ class RateFinder(object):
 
     def find_rate(self, zipcode):
         """Returns a string representing the rate for a zipcode, or an empty string if the rate is unknown or ambiguous."""
+        if self.use_cache:
+            # Use the cached mapping.
+            return self.cache.get(zipcode, '')
         # Determine the rate. Initially the rate is unknown.
         rate = ''
         # Get the rate areas for the zipcode.
@@ -85,6 +114,28 @@ class RateFinder(object):
                 rate = '%.2f' % (rate, )
         # Return the rate.
         return rate
+
+    def dump_cache_csv(self, cache_csv):
+        """Dumps a cache_csv for mapping zipcodes directly to slcsp rates."""
+        with open(cache_csv, 'w') as fp:
+            print('zipcode', 'slcsp_rate', sep=',', file=fp)
+            for zipcode in self.rate_areas.keys():
+                rate = self.find_rate(zipcode)
+                if rate:
+                    print(zipcode, rate, sep=',', file=fp)
+
+    def read_cache_csv(self, cache_csv):
+        """Reads a cache_csv for mapping zipcodes directly to slcsp rates."""
+        # Create a map from a zipcode to an slcsp_rate.
+        self.cache = dict()
+        # Define the expected header of the cache_csv file.
+        header = 'zipcode,slcsp_rate'
+        # Process data from the cache_csv file.
+        for data in self.read_csv(cache_csv, header):
+            # Unpack the data.
+            zipcode, slcsp_rate = data
+            # Update the map.
+            self.cache[zipcode] = slcsp_rate
 
 class RateFinderCmd(RateFinder):
     """A command-line tool for determining the second lowest cost silver plan for a set of zipcodes."""
@@ -115,7 +166,7 @@ is loaded from <plans.csv>.
         _, in_csv, zips_csv, plans_csv = argv
 
         # Initialize this RateFinder.
-        super().__init__(zips_csv, plans_csv)
+        super().__init__(zips_csv, plans_csv, 'cache.csv')
 
         # Read the in_csv file and output results to stdout.
         self.read_in_csv(in_csv, stdout)

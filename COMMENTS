@@ -1,0 +1,11 @@
+Prerequisites: python3 and nose2.
+
+The program is in slcsp.py.
+
+Run the program as follows:
+
+python3 slcsp.py slcsp.csv zips.csv plans.csv > out.csv
+
+Test the program as follows:
+
+nose2

@@ -6,6 +6,14 @@ Run the program as follows:
 
 python3 slcsp.py slcsp.csv zips.csv plans.csv > out.csv
 
+For faster performance (for runs with different input files but the
+same zips.csv and plans.csv files), specify an optional cache.csv
+file as follows:
+
+python3 slcsp.py in1.csv zips.csv plans.csv cache.csv > out1.csv
+python3 slcsp.py in2.csv zips.csv plans.csv cache.csv > out2.csv
+python3 slcsp.py in3.csv zips.csv plans.csv cache.csv > out3.csv
+
 Test the program as follows:
 
 nose2

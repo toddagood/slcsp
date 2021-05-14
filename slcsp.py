@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-from collections import defaultdict
+from collections import defaultdict, namedtuple
+from decimal import Decimal
 from os import environ
 from os.path import getmtime, isfile
 from sys import argv, stdout, stderr
@@ -10,6 +11,11 @@ class RateFinder(object):
 
     # Exceptions.
     class CsvError(Exception): pass
+
+    # Define csv schemas.
+    zips_schema = namedtuple('Zips', 'zipcode,state,county_code,name,rate_area')
+    plans_schema = namedtuple('Plans', 'plan_id,state,metal_level,rate,rate_area')
+    cache_schema = namedtuple('Cache', 'zipcode,slcsp_rate')
 
     def __init__(self, zips_csv, plans_csv, cache_csv=None):
         """Initializes this RateFinder."""
@@ -47,51 +53,42 @@ class RateFinder(object):
         """Reads a zips_csv file."""
         # Create a map from a zipcode to a set of rate areas.
         self.rate_areas = defaultdict(set)
-        # Define the expected header of the zips_csv file.
-        header = 'zipcode,state,county_code,name,rate_area'
         # Process data from the zips_csv file.
-        for data in self.read_csv(zips_csv, header):
-            # Unpack the data.
-            zipcode, state, _, _, rate_area = data
+        for data in self.read_csv(zips_csv, self.zips_schema):
             # Update the map.
-            self.rate_areas[zipcode].add((state, rate_area))
+            self.rate_areas[data.zipcode].add((data.state, data.rate_area))
 
     def read_plans_csv(self, plans_csv):
         """Reads a plans_csv file."""
         # Create a map from a rate area to a set of rates.
         self.rates = defaultdict(set)
-        # Define the expected header of the plans_csv file.
-        header = 'plan_id,state,metal_level,rate,rate_area'
         # Process data from the plans_csv file.
-        for data in self.read_csv(plans_csv, header):
-            # Unpack the data.
-            _, state, metal_level, rate, rate_area = data
-            if metal_level == 'Silver':
+        for data in self.read_csv(plans_csv, self.plans_schema):
+            if data.metal_level == 'Silver':
                 # It is a silver plan, so update the map.
-                self.rates[(state, rate_area)].add(float(rate))
+                self.rates[(data.state, data.rate_area)].add(Decimal(data.rate))
 
-    def read_csv(self, csv, header):
+    def read_csv(self, csv, schema):
         """Reads a csv file, yielding data one line at a time."""
-        # Count the number of fields in the expected header.
-        cnt = len(header.split(','))
+        # Get the header and field count from the schema.
+        header = ','.join(schema._fields)
+        cnt = len(schema._fields)
         # Open the csv file.
-        fp = open(csv)
-        # Read the first line.
-        line = fp.readline()
-        if line.rstrip('\n') != header:
-            # The first line does not contain the expected header.
-            raise self.CsvError('File {}: Line 1: Expected header: {}'.format(csv, header))
-        # Read each data line.
-        for i, line in enumerate(fp):
-            # Strip the trailing newline character and split the line into fields based on commas.
-            data = line.rstrip('\n').split(',')
-            if len(data) != cnt:
-                # The number of fields in the data line does not match the number of fields in the header.
-                raise self.CsvError('File {}: Line {}: Expected {} columns but got {}'.format(csv, i+2, cnt, len(data)))
-            # Yield the data.
-            yield data
-        # Close the file.
-        fp.close()
+        with open(csv) as fp:
+            # Read the first line.
+            line = fp.readline()
+            if line.rstrip('\n') != header:
+                # The first line does not contain the expected header.
+                raise self.CsvError('File {}: Line 1: Expected header: {}'.format(csv, header))
+            # Read each data line.
+            for i, line in enumerate(fp):
+                # Strip the trailing newline character and split the line into fields based on commas.
+                values = line.rstrip('\n').split(',')
+                if len(values) != cnt:
+                    # The number of fields in the data line does not match the number of fields in the header.
+                    raise self.CsvError('File {}: Line {}: Expected {} columns but got {}'.format(csv, i+2, cnt, len(values)))
+                # Yield the data using the schema.
+                yield schema._make(values)
 
     def find_rate(self, zipcode):
         """Returns a string representing the rate for a zipcode, or an empty string if the rate is unknown or ambiguous."""
@@ -111,31 +108,34 @@ class RateFinder(object):
                 # There is an well defined second lowest rate for the zip code.
                 rate = sorted(rates)[1]
                 # Format the rate with two digits after the decimal point.
-                rate = '%.2f' % (rate, )
+                rate = str(round(rate, 2))
         # Return the rate.
         return rate
 
     def dump_cache_csv(self, cache_csv):
         """Dumps a cache_csv for mapping zipcodes directly to slcsp rates."""
+        # Get the header from the schema.
+        header = ','.join(self.cache_schema._fields)
+        # Write to the cache_csv file.
         with open(cache_csv, 'w') as fp:
-            print('zipcode', 'slcsp_rate', sep=',', file=fp)
+            # Print the header.
+            print(header, file=fp)
+            # Consider every known zipcode.
             for zipcode in self.rate_areas.keys():
+                # Get the rate.
                 rate = self.find_rate(zipcode)
                 if rate:
+                    # The rate is known, so print a mapping.
                     print(zipcode, rate, sep=',', file=fp)
 
     def read_cache_csv(self, cache_csv):
         """Reads a cache_csv for mapping zipcodes directly to slcsp rates."""
         # Create a map from a zipcode to an slcsp_rate.
         self.cache = dict()
-        # Define the expected header of the cache_csv file.
-        header = 'zipcode,slcsp_rate'
         # Process data from the cache_csv file.
-        for data in self.read_csv(cache_csv, header):
-            # Unpack the data.
-            zipcode, slcsp_rate = data
+        for data in self.read_csv(cache_csv, self.cache_schema):
             # Update the map.
-            self.cache[zipcode] = slcsp_rate
+            self.cache[data.zipcode] = data.slcsp_rate
 
 class RateFinderCmd(RateFinder):
     """A command-line tool for determining the second lowest cost silver plan for a set of zipcodes."""
@@ -143,48 +143,54 @@ class RateFinderCmd(RateFinder):
     # Exceptions.
     class UsageError(Exception): pass
 
+    # Define csv schemas.
+    in_schema = namedtuple('In', 'zipcode,rate')
+
     def __init__(self):
         """Initializes this RateFinderCmd."""
-        if len(argv) != 4:
-            # Required args are missing.
+        if len(argv) < 4 or len(argv) > 5:
+            # Wrong number of args.
             raise self.UsageError("""
 
-Usage: {} <in.csv> <zips.csv> <plans.csv>
+Usage: {} <in.csv> <zips.csv> <plans.csv> [<cache.csv>]
 
 Reads zipcodes from <in.csv> which must contain two columns (zipcode,rate).
 Prints the same CSV file to stdout, but with the rate information replaced
-with the second lowest cost silver plan for that zip code.
+with the rate of the second lowest cost silver plan for that zipcode.
 
-Data for mapping zipcodes to region codes is loaded from <zips.csv>.
+Data for mapping zipcodes to rate areas is loaded from <zips.csv>.
 
-Data for mapping region codes to plans and their corresponding rates
-is loaded from <plans.csv>.
+Data for mapping rate areas to health care plans and their corresponding
+rates is loaded from <plans.csv>.
+
+If a <cache.csv> file is provided, then a direct mapping from all zipcodes
+to second lowest cost silver plan rates will be cached in the specified file.
 
 """.format(argv[0]))
 
-        # Unpack the args.
-        _, in_csv, zips_csv, plans_csv = argv
+        # Unpack the required args.
+        in_csv, zips_csv, plans_csv = argv[1:4]
+        # Unpack the optional args.
+        cache_csv = (argv[4] if len(argv) > 4 else None)
 
         # Initialize this RateFinder.
-        super().__init__(zips_csv, plans_csv, 'cache.csv')
+        super().__init__(zips_csv, plans_csv, cache_csv)
 
-        # Read the in_csv file and output results to stdout.
+        # Read the in_csv file and print results to stdout.
         self.read_in_csv(in_csv, stdout)
 
     def read_in_csv(self, in_csv, out_fp):
-        """Reads the in_csv file and output results to stdout."""
-        # Define the expected header of the in_csv file.
-        header = 'zipcode,rate'
+        """Reads the in_csv file and prints results to an output file."""
+        # Get the header from the schema.
+        header = ','.join(self.in_schema._fields)
         # Print the header.
         print(header, file=out_fp)
         # Process data from the in_csv file.
-        for data in self.read_csv(csv=in_csv, header=header):
-            # Unpack the data.
-            zipcode, _ = data
+        for data in self.read_csv(in_csv, self.in_schema):
             # Find the rate.
-            rate = self.find_rate(zipcode)
+            rate = self.find_rate(data.zipcode)
             # Print the zipcode and rate.
-            print(zipcode, rate, sep=',', file=out_fp)
+            print(data.zipcode, rate, sep=',', file=out_fp)
 
 if __name__ == '__main__':
     # Run the main program.

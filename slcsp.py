@@ -142,9 +142,6 @@ class RateFinder(object):
 class RateFinderCmd(RateFinder):
     """A command-line tool for determining the second lowest cost silver plan for a set of zipcodes."""
 
-    # Exceptions.
-    class UsageError(Exception): pass
-
     # Define csv schemas.
     in_schema = namedtuple('In', 'zipcode,rate')
 

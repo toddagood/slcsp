@@ -76,16 +76,16 @@ class RateFinder(object):
         header = ','.join(schema._fields)
         cnt = len(schema._fields)
         # Open the csv file.
-        with open(csv) as fp:
+        with open(csv, newline='') as fp:
             # Read the first line.
             line = fp.readline()
-            if line.rstrip('\n') != header:
+            if line.rstrip('\r\n') != header:
                 # The first line does not contain the expected header.
                 raise self.CsvError('File {}: Line 1: Expected header: {}'.format(csv, header))
             # Read each data line.
             for i, line in enumerate(fp):
-                # Strip the trailing newline character and split the line into fields based on commas.
-                values = line.rstrip('\n').split(',')
+                # Strip the trailing newline and split the line into fields based on commas.
+                values = line.rstrip('\r\n').split(',')
                 if len(values) != cnt:
                     # The number of fields in the data line does not match the number of fields in the header.
                     raise self.CsvError('File {}: Line {}: Expected {} columns but got {}'.format(csv, i+2, cnt, len(values)))

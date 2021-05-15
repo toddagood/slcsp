@@ -4,16 +4,52 @@ The program is in slcsp.py.
 
 Run the program as follows:
 
-python3 slcsp.py slcsp.csv zips.csv plans.csv > out.csv
+% python3 slcsp.py slcsp.csv zips.csv plans.csv > out.csv
 
 For faster performance (for runs with different input files but the
 same zips.csv and plans.csv files), specify an optional cache.csv
 file as follows:
 
-python3 slcsp.py in1.csv zips.csv plans.csv cache.csv > out1.csv
-python3 slcsp.py in2.csv zips.csv plans.csv cache.csv > out2.csv
-python3 slcsp.py in3.csv zips.csv plans.csv cache.csv > out3.csv
+% python3 slcsp.py in1.csv zips.csv plans.csv cache.csv > out1.csv
+% python3 slcsp.py in2.csv zips.csv plans.csv cache.csv > out2.csv
+% python3 slcsp.py in3.csv zips.csv plans.csv cache.csv > out3.csv
 
 Test the program as follows:
 
-nose2
+% nose2
+
+Observations:
+    For a zipcode to successfully map to a rate, the zipcode has
+    to map (by zips.csv) to a single (state, rate_area) tuple,
+    and that (state, rate_area) tuple has to map (by plans.csv) to a
+    set of rates corresponding to at least two differently priced
+    silver plans.
+
+    In zips.csv, there are 51541 zipcodes, but only 38804 of them
+    are unique and only 35081 of the unique zipcodes map to a single
+    (state, rate_area) tuple.  So 3723 unique zipcodes are filtered
+    out by the first mapping (by zips.csv).
+
+    In plans.csv, there are 22240 plans, but only 8462 of them are
+    silver plans and those silver plans are only available in 411
+    unique (state, rate_area) tuples, and only 410 of those tuples
+    map to a set of rates corresponding to at least two differently
+    priced silver plans.  The only tuple that has a single silver
+    rate is ('NJ', '1').
+
+    There are only 25207 zipcodes that successfully map to a rate,
+    so 9874 unique zipcodes are filtered out by the second mapping
+    (by plans.csv).
+
+    So overall the filtering of unique zipcodes looks like this:
+        38804 --> (zips.csv) --> 35081 --> (plans.csv) --> 25207
+
+    When using a cache.csv file, the program creates a map from
+    zipcodes to rates with 25207 entries.
+
+    When not using a cache.csv file, the program currently creates
+    a map from zipcodes to sets of (state, rate_area) tuples with
+    38804 entries and a map from (state, rate_area) tuples to sets
+    of silver plan rates with 411 entries.
+
+

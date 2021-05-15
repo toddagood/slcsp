@@ -1,6 +1,13 @@
-from nose import run
-from slcsp import *
+import contextlib
+import io
+import os
+import sys
 import unittest
+
+from nose import run
+from tempfile import TemporaryDirectory
+
+from slcsp import *
 
 class Test_Exceptions(unittest.TestCase):
     """Ensure exceptions are raised."""
@@ -133,6 +140,29 @@ class Test_Mappings(unittest.TestCase):
         # The rate must be greater than the lowest rate.
         self.assertEqual(', '.join(map(str, sorted(self.rate_finder.rates[('WV', '9')]))),
                          '278.9, 291.76, 295.05, 295.63')
+
+class Test_Caching(unittest.TestCase):
+    """Ensure caching works."""
+
+    def setUp(self):
+        """Constructs RateFinderCmds."""
+        self.tempdir = TemporaryDirectory()
+        self.cache_csv = os.path.join(self.tempdir.name, 'cache_csv')
+        with contextlib.redirect_stdout(None):
+            self.rfnc = RateFinderCmd(['-i', 'slcsp.csv', '-z', 'zips.csv', '-p', 'plans.csv'])
+            self.rfc1 = RateFinderCmd(['-i', 'slcsp.csv', '-z', 'zips.csv', '-p', 'plans.csv', '-c', self.cache_csv])
+            self.rfc2 = RateFinderCmd(['-i', 'slcsp.csv', '-z', 'zips.csv', '-p', 'plans.csv', '-c', self.cache_csv])
+        self.keys = sorted(self.rfnc.rate_areas.keys())
+
+    def test_non_caching_matches_first_caching(self):
+        """Ensure that rfnc and rfc1 produce the same results."""
+        self.assertEqual([self.rfnc.find_rate(zipcode) for zipcode in self.keys],
+                         [self.rfc1.find_rate(zipcode) for zipcode in self.keys])
+
+    def test_non_caching_matches_second_caching(self):
+        """Ensure that rfnc and rfc2 produce the same results."""
+        self.assertEqual([self.rfnc.find_rate(zipcode) for zipcode in self.keys],
+                         [self.rfc2.find_rate(zipcode) for zipcode in self.keys])
 
 if __name__ == '__main__':
     run()

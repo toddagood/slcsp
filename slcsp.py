@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
+import argparse
+import os
+import sys
+
 from collections import defaultdict, namedtuple
 from decimal import Decimal
-from os import environ
 from os.path import getmtime, isfile
-from sys import argv, stdout, stderr
 
 class RateFinder(object):
     """A tool for finding the rate of the second lowest cost silver plan for a zipcode."""
@@ -101,7 +103,7 @@ class RateFinder(object):
         rate_areas = self.rate_areas[zipcode]
         if len(rate_areas) == 1:
             # Get the rate area (there is exactly one, so there is no ambiguity).
-            rate_area = rate_areas.pop()
+            rate_area = next(iter(rate_areas))
             # Get the rates for the rate area.
             rates = self.rates[rate_area]
             if len(rates) > 1:
@@ -146,38 +148,27 @@ class RateFinderCmd(RateFinder):
     # Define csv schemas.
     in_schema = namedtuple('In', 'zipcode,rate')
 
-    def __init__(self):
+    def __init__(self, args):
         """Initializes this RateFinderCmd."""
-        if len(argv) < 4 or len(argv) > 5:
-            # Wrong number of args.
-            raise self.UsageError("""
-
-Usage: {} <in.csv> <zips.csv> <plans.csv> [<cache.csv>]
-
-Reads zipcodes from <in.csv> which must contain two columns (zipcode,rate).
-Prints the same CSV file to stdout, but with the rate information replaced
-with the rate of the second lowest cost silver plan for that zipcode.
-
-Data for mapping zipcodes to rate areas is loaded from <zips.csv>.
-
-Data for mapping rate areas to health care plans and their corresponding
-rates is loaded from <plans.csv>.
-
-If a <cache.csv> file is provided, then a direct mapping from all zipcodes
-to second lowest cost silver plan rates will be cached in the specified file.
-
-""".format(argv[0]))
-
-        # Unpack the required args.
-        in_csv, zips_csv, plans_csv = argv[1:4]
-        # Unpack the optional args.
-        cache_csv = (argv[4] if len(argv) > 4 else None)
+        # Construct an args parser and add args.
+        parser = argparse.ArgumentParser(description='Finds the second lowest cost silver plan for a set of zipcodes.')
+        parser.add_argument('-i', dest='in_csv', metavar='in_csv', required=True,
+                            help='a csv file containing zipcodes to be processed')
+        parser.add_argument('-z', dest='zips_csv', metavar='zips_csv', required=True,
+                            help='a csv file that associates zipcode, state, and rate_area fields')
+        parser.add_argument('-p', dest='plans_csv', metavar='plans_csv', required=True,
+                            help='a csv file that associates state, rate_area, metal_level, and rate fields')
+        parser.add_argument('-c', dest='cache_csv', metavar='cache_csv',
+                            help='a csv file that associates zipcode and slcsp_rate fields')
+        
+        # Parse the command-line args.
+        args = parser.parse_args(args)
 
         # Initialize this RateFinder.
-        super().__init__(zips_csv, plans_csv, cache_csv)
+        super().__init__(args.zips_csv, args.plans_csv, args.cache_csv)
 
         # Read the in_csv file and print results to stdout.
-        self.read_in_csv(in_csv, stdout)
+        self.read_in_csv(args.in_csv, sys.stdout)
 
     def read_in_csv(self, in_csv, out_fp):
         """Reads the in_csv file and prints results to an output file."""
@@ -195,13 +186,13 @@ to second lowest cost silver plan rates will be cached in the specified file.
 if __name__ == '__main__':
     # Run the main program.
     try:
-        RateFinderCmd()
+        RateFinderCmd(sys.argv[1:])
     except Exception as e:
         # Handle exceptions.
-        if environ.get('SLCSP_DEV'):
+        if os.environ.get('SLCSP_DEV'):
             # Show tracebacks in development mode.
             raise e
         else:
             # Show formatted errors in production mode.
-            print('Error: {}: {}'.format(type(e).__name__, e), file=stderr)
+            print('Error: {}: {}'.format(type(e).__name__, e), file=sys.stderr)
             exit(1)

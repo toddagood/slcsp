@@ -4,15 +4,15 @@ The program is in slcsp.py.
 
 Run the program as follows:
 
-% python3 slcsp.py slcsp.csv zips.csv plans.csv > out.csv
+% python3 slcsp.py -i slcsp.csv -z zips.csv -p plans.csv > out.csv
 
 For faster performance (for runs with different input files but the
 same zips.csv and plans.csv files), specify an optional cache.csv
 file as follows:
 
-% python3 slcsp.py in1.csv zips.csv plans.csv cache.csv > out1.csv
-% python3 slcsp.py in2.csv zips.csv plans.csv cache.csv > out2.csv
-% python3 slcsp.py in3.csv zips.csv plans.csv cache.csv > out3.csv
+% python3 slcsp.py -i in1.csv -z zips.csv -p plans.csv -c cache.csv > out1.csv
+% python3 slcsp.py -i in2.csv -z zips.csv -p plans.csv -c cache.csv > out2.csv
+% python3 slcsp.py -i in3.csv -z zips.csv -p plans.csv -c cache.csv > out3.csv
 
 Test the program as follows:
 
